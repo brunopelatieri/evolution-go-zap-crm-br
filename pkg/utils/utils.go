@@ -590,6 +590,21 @@ func GetStringValue(s *string) string {
 	return *s
 }
 
+// ResolveOnWhatsAppJIDs splits an IsOnWhatsApp result into its phone number and
+// LID JIDs. whatsmeow queries with addressing_mode=lid, so JID may be a @lid with
+// the phone number in PhoneNumber. phone falls back to JID when the server sent
+// no phone number; lid is empty when JID is not a @lid.
+func ResolveOnWhatsAppJIDs(item whatsmeow_types.IsOnWhatsAppResponse) (phone, lid whatsmeow_types.JID) {
+	phone = item.JID
+	if item.JID.Server == whatsmeow_types.HiddenUserServer {
+		lid = item.JID
+	}
+	if !item.PhoneNumber.IsEmpty() {
+		phone = item.PhoneNumber
+	}
+	return phone, lid
+}
+
 // PrepareNumbersForWhatsAppCheck prepares phone numbers for IsOnWhatsApp call
 // based on formatJid flag. This centralizes the logic used by both CheckUser and SendText.
 func PrepareNumbersForWhatsAppCheck(numbers []string, formatJid *bool) ([]string, error) {

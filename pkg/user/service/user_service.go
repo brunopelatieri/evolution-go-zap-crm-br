@@ -242,20 +242,27 @@ func (u *userService) performCheckUser(client *whatsmeow.Client, numbers []strin
 	shouldRetry := false
 
 	for _, item := range resp {
-		// Consultar LID Store para obter LID associado ao JID
-		var lidStr *string
-		if client.Store.LIDs != nil {
-			if lid, err := client.Store.LIDs.GetLIDForPN(context.TODO(), item.JID); err == nil && !lid.IsEmpty() {
-				lidString := fmt.Sprintf("%v", lid)
-				lidStr = &lidString
+		// item.JID pode ser um @lid: JID e RemoteJID da API continuam sendo o número
+		phoneJID, lidJID := utils.ResolveOnWhatsAppJIDs(item)
+
+		// Consultar LID Store para obter LID associado ao número
+		if lidJID.IsEmpty() && client.Store.LIDs != nil {
+			if lid, err := client.Store.LIDs.GetLIDForPN(context.TODO(), phoneJID); err == nil {
+				lidJID = lid
 			}
+		}
+
+		var lidStr *string
+		if !lidJID.IsEmpty() {
+			lidString := fmt.Sprintf("%v", lidJID)
+			lidStr = &lidString
 		}
 
 		// Determine the RemoteJID to use for messaging
 		remoteJID := item.Query // Default to original query
 		if item.IsIn {
 			// When user exists on WhatsApp, use the JID returned by WhatsApp
-			remoteJID = fmt.Sprintf("%v", item.JID)
+			remoteJID = fmt.Sprintf("%v", phoneJID)
 		} else if formatJid {
 			// If user not found and we used formatJid=true, we should retry with formatJid=false
 			shouldRetry = true
@@ -265,7 +272,7 @@ func (u *userService) performCheckUser(client *whatsmeow.Client, numbers []strin
 			var msg = User{
 				Query:        item.Query,
 				IsInWhatsapp: item.IsIn,
-				JID:          fmt.Sprintf("%v", item.JID),
+				JID:          fmt.Sprintf("%v", phoneJID),
 				RemoteJID:    remoteJID,
 				LID:          lidStr,
 				VerifiedName: item.VerifiedName.Details.GetVerifiedName(),
@@ -275,7 +282,7 @@ func (u *userService) performCheckUser(client *whatsmeow.Client, numbers []strin
 			var msg = User{
 				Query:        item.Query,
 				IsInWhatsapp: item.IsIn,
-				JID:          fmt.Sprintf("%v", item.JID),
+				JID:          fmt.Sprintf("%v", phoneJID),
 				RemoteJID:    remoteJID,
 				LID:          lidStr,
 				VerifiedName: "",
@@ -444,7 +451,7 @@ func (u *userService) BlockContact(data *BlockStruct, instance *instance_model.I
 		return nil, errors.New("invalid phone number")
 	}
 
-	resp, err := client.UpdateBlocklist(context.Background(), jid, events.BlocklistChangeActionBlock)
+	resp, err := client.UpdateBlocklist(context.Background(), jid, events.BlocklistChangeActionBlock, "")
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +470,7 @@ func (u *userService) UnlockContact(data *BlockStruct, instance *instance_model.
 		return nil, errors.New("invalid phone number")
 	}
 
-	resp, err := client.UpdateBlocklist(context.Background(), jid, events.BlocklistChangeActionUnblock)
+	resp, err := client.UpdateBlocklist(context.Background(), jid, events.BlocklistChangeActionUnblock, "")
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +484,7 @@ func (u *userService) GetBlockList(instance *instance_model.Instance) (*types.Bl
 		return nil, err
 	}
 
-	resp, err := client.GetBlocklist(context.Background())
+	resp, err := client.GetBlocklist(context.Background(), "")
 	if err != nil {
 		return nil, err
 	}
@@ -532,7 +539,7 @@ func (u *userService) SetProfileStatus(data *SetProfileStatusStruct, instance *i
 		return false, err
 	}
 
-	err = client.SetStatusMessage(context.Background(), data.Status)
+	err = client.SetStatusMessage(context.Background(), types.SetStatusInput{Text: &data.Status})
 	if err != nil {
 		return false, err
 	}

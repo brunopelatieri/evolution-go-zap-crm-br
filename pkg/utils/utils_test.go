@@ -3,7 +3,56 @@ package utils
 import (
 	"strings"
 	"testing"
+
+	whatsmeow_types "go.mau.fi/whatsmeow/types"
 )
+
+func TestResolveOnWhatsAppJIDs(t *testing.T) {
+	pn := whatsmeow_types.NewJID("5511999999999", whatsmeow_types.DefaultUserServer)
+	lid := whatsmeow_types.NewJID("15883309207561", whatsmeow_types.HiddenUserServer)
+
+	tests := []struct {
+		name          string
+		item          whatsmeow_types.IsOnWhatsAppResponse
+		expectedPhone whatsmeow_types.JID
+		expectedLID   whatsmeow_types.JID
+	}{
+		{
+			name:          "LID with phone number",
+			item:          whatsmeow_types.IsOnWhatsAppResponse{JID: lid, PhoneNumber: pn},
+			expectedPhone: pn,
+			expectedLID:   lid,
+		},
+		{
+			name:          "Phone number only",
+			item:          whatsmeow_types.IsOnWhatsAppResponse{JID: pn, PhoneNumber: pn},
+			expectedPhone: pn,
+		},
+		{
+			name:          "Phone number in JID without PhoneNumber",
+			item:          whatsmeow_types.IsOnWhatsAppResponse{JID: pn},
+			expectedPhone: pn,
+		},
+		{
+			name:          "LID without phone number falls back to LID",
+			item:          whatsmeow_types.IsOnWhatsAppResponse{JID: lid},
+			expectedPhone: lid,
+			expectedLID:   lid,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			phone, gotLID := ResolveOnWhatsAppJIDs(tt.item)
+			if phone != tt.expectedPhone {
+				t.Errorf("phone = %v, want %v", phone, tt.expectedPhone)
+			}
+			if gotLID != tt.expectedLID {
+				t.Errorf("lid = %v, want %v", gotLID, tt.expectedLID)
+			}
+		})
+	}
+}
 
 func TestCreateJID(t *testing.T) {
 	tests := []struct {

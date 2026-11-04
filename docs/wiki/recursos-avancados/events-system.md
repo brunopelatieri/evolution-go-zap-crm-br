@@ -660,6 +660,7 @@ O Evolution GO usa dois níveis de classificação de eventos:
 - `Disconnected` - Instância desconectada
 - `LoggedOut` - Logout realizado (por outra sessão ou WhatsApp)
 - `TemporaryBan` - Conta temporariamente banida
+- `ClientOutdated` - WhatsApp recusou a versão do cliente (erro 405); é preciso atualizar o whatsmeow
 
 ### Eventos de QR Code
 

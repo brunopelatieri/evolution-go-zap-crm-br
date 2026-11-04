@@ -1966,6 +1966,30 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		if err != nil {
 			mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Error updating instance: %s", mycli.Instance.Id, err)
 		}
+	case *events.ClientOutdated:
+		// 405: o WhatsApp recusou a versão do cliente. A lib não reconecta nem emite
+		// ConnectFailure neste caso. Não sinalizar killChannel: o StartClient
+		// reportaria LoggedOut e reconectaria, entrando em loop de 405.
+		doWebhook = true
+		postMap["event"] = "ClientOutdated"
+		reason := "client outdated (405)"
+		waVersion := store.GetWAVersion().String()
+		postMap["data"] = map[string]interface{}{"reason": reason, "waVersion": waVersion}
+		mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] WhatsApp rejected client version %s: whatsmeow must be updated", mycli.userID, waVersion)
+
+		// Limpar cache de userInfo para esta instância
+		mycli.userInfoCache.Delete(mycli.Instance.Token)
+
+		// Remover QR code antigo para não ser servido como se ainda fosse válido
+		if err := mycli.instanceRepository.UpdateQrcode(mycli.Instance.Id, ""); err != nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Error updating instance: %s", mycli.Instance.Id, err)
+		}
+
+		mycli.Instance.DisconnectReason = reason
+		mycli.Instance.Connected = false
+		if err := mycli.instanceRepository.UpdateConnected(mycli.Instance.Id, mycli.Instance.Connected, mycli.Instance.DisconnectReason); err != nil {
+			mycli.loggerWrapper.GetLogger(mycli.userID).LogError("[%s] Error updating instance: %s", mycli.Instance.Id, err)
+		}
 	case *events.Disconnected:
 		doWebhook = true
 		postMap["event"] = "Disconnected"
@@ -2222,7 +2246,7 @@ func (w *whatsmeowService) CallWebhook(instance *instance_model.Instance, queueN
 			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
 			w.sendToQueueOrWebhook(instance, queueName, jsonData)
 		}
-	case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
+	case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "ClientOutdated", "Disconnected":
 		if contains(subscriptions, "CONNECTION") {
 			w.loggerWrapper.GetLogger(instance.Id).LogInfo("[%s] Event received of type %s", instance.Id, eventType)
 			w.sendToQueueOrWebhook(instance, queueName, jsonData)
@@ -2510,7 +2534,7 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 				globalEventType = "CHAT_PRESENCE"
 			case "CallOffer", "CallAccept", "CallTerminate", "CallOfferNotice", "CallRelayLatency":
 				globalEventType = "CALL"
-			case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
+			case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "ClientOutdated", "Disconnected":
 				globalEventType = "CONNECTION"
 			case "LabelEdit", "LabelAssociationChat", "LabelAssociationMessage":
 				globalEventType = "LABEL"
@@ -2572,7 +2596,7 @@ func (w *whatsmeowService) SendToGlobalQueues(eventType string, payload []byte, 
 			globalEventType = "CHAT_PRESENCE"
 		case "CallOffer", "CallAccept", "CallTerminate", "CallOfferNotice", "CallRelayLatency":
 			globalEventType = "CALL"
-		case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "Disconnected":
+		case "Connected", "PairSuccess", "TemporaryBan", "LoggedOut", "ConnectFailure", "ClientOutdated", "Disconnected":
 			globalEventType = "CONNECTION"
 		case "LabelEdit", "LabelAssociationChat", "LabelAssociationMessage":
 			globalEventType = "LABEL"
